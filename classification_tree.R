@@ -1,6 +1,4 @@
 library(tree)
-library(randomForest)
-library(gbm)
 
 rd <- read.csv("recidivism_data_sample.csv")
 
@@ -22,7 +20,6 @@ plot(rtree1)
 text(rtree1,pretty = 33)
 rtree1
 
-
 rtree2 <- tree(recidivate ~ ., data = train.dat, mindev = 0.002)
 summary(rtree2)
 plot(rtree2)
@@ -31,6 +28,7 @@ rtree2
 rtree3 <- tree(recidivate ~ ., data = train.dat, mindev = 0.003)
 summary(rtree3)
 plot(rtree3)
+text(rtree3)
 
 rtest1 <- predict(rtree1, newdata = test.dat, type = "vector")
 rtest2 <- predict(rtree2, newdata = test.dat, type = "vector")
@@ -39,6 +37,7 @@ rtest3 <- predict(rtree3, newdata = test.dat, type = "vector")
 mean((test.dat$recidivate - rtest1)^2)
 mean((test.dat$recidivate - rtest2)^2)
 mean((test.dat$recidivate - rtest3)^2)
+
 
 
 # Classification data -----------------------------------------------------
@@ -88,6 +87,7 @@ mean(test.dat.class$MajorityAccepted != ctest3)
 
 
 # random forest - application of bagging to CART but with an additional layer
+library(randomForest)
 
 # Data split --------------------------------------------------------------
 set.seed(1234)
@@ -95,3 +95,11 @@ n <- nrow(rd)
 v <- sample(n,4000,replace = FALSE)
 train.dat <- rd[v,]
 test.dat <- rd[-v,]
+
+
+
+
+
+# boosted tree
+
+library(gbm)
