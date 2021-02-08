@@ -4,6 +4,8 @@ rd <- read.csv("recidivism_data_sample.csv")
 
 head(rd)
 summary(rd)
+#drop ID because it's meaningless
+rd <- rd[,-1]
 
 # Regression Tree ---------------------------------------------------------
 
