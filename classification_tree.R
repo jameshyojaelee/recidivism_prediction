@@ -5,7 +5,7 @@ rd <- read.csv("recidivism_data_sample.csv")
 head(rd)
 summary(rd)
 
-# Regression Tree
+# Regression Tree ---------------------------------------------------------
 
 # Data split --------------------------------------------------------------
 set.seed(123)
@@ -38,36 +38,28 @@ mean((test.dat$recidivate - rtest1)^2)
 mean((test.dat$recidivate - rtest2)^2)
 mean((test.dat$recidivate - rtest3)^2)
 
-
-
-# Classification data -----------------------------------------------------
+# Classification trees ----------------------------------------------------
 
 train.dat.class <- train.dat
 test.dat.class <- test.dat
 
 train.dat.class$recidivate <- 
-  as.factor(train.dat.class$recidivate > 5)
+  as.factor(train.dat.class$recidivate)
 test.dat.class$recidivate <- 
-  as.factor(test.dat.class$recidivate > 5)
-
-names(train.dat.class)[1] <- names(test.dat.class)[1] <-
-  "recidivated"
+  as.factor(test.dat.class$recidivate)
 
 head(train.dat.class)
 
-
-# Classification trees ----------------------------------------------------
-
-ctree1 <- tree(MajorityAccepted ~ ., data = train.dat.class)
+ctree1 <- tree(recidivate ~ ., data = train.dat.class)
 summary(ctree1)
 plot(ctree1)
 text(ctree1,pretty = 0)
 
-ctree2 <- tree(MajorityAccepted ~ ., data = train.dat.class, mindev = 0.002)
+ctree2 <- tree(recidivate ~ ., data = train.dat.class, mindev = 0.002)
 summary(ctree2)
 plot(ctree2)
 
-ctree3 <- tree(MajorityAccepted ~ ., data = train.dat.class, mindev = 0)
+ctree3 <- tree(recidivate ~ ., data = train.dat.class, mindev = 0)
 summary(ctree3)
 plot(ctree3)
 
@@ -78,15 +70,13 @@ ctest1 <- predict(ctree1, newdata = test.dat.class, type = "class")
 ctest2 <- predict(ctree2, newdata = test.dat.class, type = "class")
 ctest3 <- predict(ctree3, newdata = test.dat.class, type = "class")
 
-mean(test.dat.class$MajorityAccepted != ctest1)
-mean(test.dat.class$MajorityAccepted != ctest2)
-mean(test.dat.class$MajorityAccepted != ctest3)
+mean(test.dat.class$recidivate != ctest1)
+mean(test.dat.class$recidivate != ctest2)
+mean(test.dat.class$recidivate != ctest3)
 
 
-
-
-
-# random forest - application of bagging to CART but with an additional layer
+# random forest -----------------------------------------------------------
+#    application of bagging to CART but with an additional layer
 library(randomForest)
 
 # Data split --------------------------------------------------------------
