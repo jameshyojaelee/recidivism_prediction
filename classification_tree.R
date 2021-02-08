@@ -75,21 +75,5 @@ mean(test.dat.class$recidivate != ctest2)
 mean(test.dat.class$recidivate != ctest3)
 
 
-# random forest -----------------------------------------------------------
-#    application of bagging to CART but with an additional layer
-library(randomForest)
-
-# Data split --------------------------------------------------------------
-set.seed(1234)
-n <- nrow(rd)
-v <- sample(n,4000,replace = FALSE)
-train.dat <- rd[v,]
-test.dat <- rd[-v,]
 
 
-
-
-
-# boosted tree
-
-library(gbm)
