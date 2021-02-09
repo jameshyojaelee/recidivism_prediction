@@ -1,0 +1,118 @@
+---
+title: "Challenge 1"
+author: "Maya Lu"
+date: "2/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyr)
+library(glmnet)
+dat <- read.csv("recidivism_data_sample.csv")
+```
+
+## Setup   
+Separate data into training and test set. 
+```{r}
+# Split into predictor vector (y) and feature matrix (x)
+y <- dat$recidivate
+
+# =====================
+# CREATING THE X MATRIX
+# =====================
+# OPTION 1: Include all variables
+x <- subset(dat, select = -c(recidivate))
+x <- model.matrix(~.-1, x[,]) # Convert all categorical variable to dummies.
+
+# OPTION 2: Exclude nominal data (id & race), include charge_name as dummies.
+# x <- subset(dat, select = -c(recidivate, id, race))
+# x <- model.matrix(~.-1, x[,]) # Convert all categorical variable to dummies.
+
+# OPTION 3: Exclude nominal and charge_name (id,race, & charge_name)
+# x <- as.matrix(subset(dat, select = -c(recidivate, id, race, charge_name)))
+
+
+# Determine number of in training and test set. Split accordingly.
+n.total <- length(y)
+prop.train <- 0.67 
+set.seed(123)
+r <- sample(1:n.total, round(prop.train*n.total), replace = FALSE) 
+
+x.train <- x[r,]
+x.test <- x[-r,]
+y.train <- y[r]
+y.test <- y[-r]
+  
+```
+
+## LASSO
+**Step 1: ** Find optimal lambda value using cross validation. 
+```{r}
+lasso.cv <- cv.glmnet(x = x.train, y = y.train,
+                             family = "binomial", nfolds = 10, alpha = 1)
+plot(lasso.cv)
+```
+
+**Step 2: ** Fit model with optimal lambda. 
+```{r}
+opt.lambda.lasso <- lasso.cv$lambda.1se
+opt.model.lasso <-  glmnet(x = x.train, y = y.train, alpha = 1, lambda = opt.lambda.lasso, family = "binomial") 
+```
+
+**Step 3: ** Predict onto test data.
+```{r}
+test.predprob <- predict(opt.model.lasso, newx = x.test, type = "response")
+yhat.test <- as.numeric(test.predprob > 0.5)
+
+# accuracy
+accLASSO.test <- mean(y.test == yhat.test)
+
+# precision
+precLASSO.test <- mean(y.test[yhat.test == 1] == 1)
+
+# recall
+recallLASSO.test <- mean(yhat.test[y.test == 1] == 1)
+
+#mse
+mseLASSO.test <- mean((yhat.test - y.test)^2)
+```
+
+## RIDGE REGRESSION
+**Step 1: ** Find optimal lambda value using cross validation. 
+```{r}
+rr.cv <- cv.glmnet(x = x.train, y = y.train,
+                             family = "binomial", nfolds = 10, alpha = 0)
+plot(rr.cv)
+```
+
+**Step 2: ** Fit model with optimal lambda. 
+```{r}
+opt.lambda.rr <- rr.cv$lambda.1se
+opt.model.rr <-  glmnet(x = x.train, y = y.train, alpha = 0, lambda = opt.lambda.rr, family = "binomial") 
+```
+
+**Step 3: ** Predict onto test data and find error metrics.
+```{r}
+test.predprob.rr <- predict(opt.model.rr, newx = x.test, type = "response")
+yhat.test.rr <- as.numeric(test.predprob.rr > 0.5)
+
+# accuracy
+accRR.test <- mean(y.test == yhat.test.rr)
+
+# precision
+precRR.test <- mean(y.test[yhat.test.rr == 1] == 1)
+
+# recall
+recallRR.test <- mean(yhat.test.rr[y.test == 1] == 1)
+
+#mse
+mseRR.test <- mean((yhat.test.rr-y.test)^2)
+```
+
+## Results
+```{r}
+rr <- c(accRR.test, precRR.test, recallRR.test, mseRR.test)
+lasso <- c(accLASSO.test, precLASSO.test, recallLASSO.test, mseLASSO.test)
+data.frame("rr_outofsample" = rr, "lasso_outofsample" = lasso, row.names = c("accuracy", "precision", "recall", "mse"))
+```
