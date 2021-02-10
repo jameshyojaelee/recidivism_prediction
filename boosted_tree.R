@@ -83,9 +83,6 @@ final.depth
 
 test.dat.preds <- predict(bt.models[[m]], newdata = test.dat, 
                           n.trees = final.ntrees)
-test.dat.preds.class <- test.dat.preds
-test.dat.preds.class[test.dat.preds.class >= 0.5] <- 1
-test.dat.preds.class[test.dat.preds.class < 0.5] <- 1
 
 #Test set MSE:
 mean((test.dat.preds.class - test.dat$recidivate)^2)
