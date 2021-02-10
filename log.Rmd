@@ -1,0 +1,139 @@
+---
+title: "Challenge 1 - Poli 175"
+author: "Emanuela Beale"
+date: "2/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(ISLR)
+```
+
+```{r}
+rec <- read.csv("/Users/emanuelabeale/Downloads/recidivism_data_sample.csv")
+```
+
+## MODEL 1: Omitting Sensitive Attributes
+First we can choose the number of folds:
+```{r}
+k <- 10
+```
+
+We can then create partitions:
+```{r}
+n <- nrow(rec)
+folds <- c(rep(seq(k),n%/%k),seq(n%/%k))
+set.seed(131)
+folds <- sample(folds,length(folds))
+```
+
+Next we can implement the partitions:
+```{r}
+rec$yhat <- NA
+data.folds <- list()
+for (i in 1:k){
+  data.folds[[i]] <- rec[folds == i,]
+}
+```
+
+We can then implement CV:
+```{r}
+for (i in 1:k){
+  train.dat <- do.call("rbind",data.folds[-i])
+  cv.mod <- glm(recidivate ~ as.factor(race) + sex + age + juv_fel_count + juv_misd_count + priors_count + charge_degree + as.factor(charge_name), family = binomial(link="logit"), data = train.dat)
+  data.folds[[i]]$yhat <- predict(cv.mod, newdata = data.folds[[i]], type = "response")
+  rm(train.dat,cv.mod)
+}
+CV.dat <- do.call("rbind",data.folds)
+```
+
+```{r}
+newCVdat <- na.omit(CV.dat)
+```
+
+Lastly, we can calculate the MSE
+```{r}
+mean(as.numeric((CV.dat$recidivate - CV.dat$yhat)^2), na.rm = TRUE)
+```
+
+Lastly, we can calculate the MSE
+```{r}
+newCVdat$yhat2 <- rep(NA,length(newCVdat$yhat))
+  for(i in 1:length(newCVdat$yhat)){
+    if (newCVdat$yhat[i] >= 0.5){
+      newCVdat$yhat2[i] = 1
+    }
+    if (newCVdat$yhat[i] < 0.5){
+      newCVdat$yhat2[i] = 0
+    }
+  }
+mean(as.numeric((newCVdat$recidivate - newCVdat$yhat2)^2),na.rm=TRUE)
+```
+
+
+```{r}
+TN <- 0
+TP <- 0
+FN <- 0 
+FP <- 0
+for (i in 1:nrow(newCVdat)){
+  if (newCVdat$recidivate[i] == 1 & newCVdat$yhat[i] >= 0.5){
+    TP <- TP + 1
+  }
+  else if (newCVdat$recidivate[i] == 1 & newCVdat$yhat[i] < 0.5){
+    FP <- FP + 1
+  }
+  else if (newCVdat$recidivate[i] == 0 & newCVdat$yhat[i] < 0.5){
+    TN <- TN + 1
+  }
+  else if (newCVdat$recidivate[i] == 0 & newCVdat$yhat[i] >= 0.5){
+    FN <- FN + 1
+  }
+}
+accuracy = (TP+TN)/nrow(newCVdat)
+accuracy
+precision = TP/(TP+FP)
+precision
+recall = TP/(TP+FN)
+recall
+```
+
+
+## MODEL 2: Including Sensitive Attributes
+
+```{r}
+
+for (i in 1:nrow(rec)){
+  if (rec$race[i] == 1){
+    rec$race[i] <- "White"
+  }
+  else if (rec$race[i] == 2){
+    rec$race[i] <- "Black"
+  }
+  else if (rec$race[i] == 3){
+    rec$race[i] <- "Hispanic"
+  }
+  else if (rec$race[i] == 4){
+    rec$race[i] <- "Asian"
+  }
+  else if (rec$race[i] == 5){
+    rec$race[i] <- "Native American"
+  }
+  else if (rec$race[i] == 6){
+    rec$race[i] <- "Other"
+  }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
