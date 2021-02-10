@@ -37,11 +37,12 @@ for (i in 1:length(depths)){
   
   bt.models[[i]] <- gbm(recidivate ~  ., 
                         data = train.dat, shrinkage = 0.01,
-                        distribution="gaussian", n.trees = 2000, 
+                        distribution="bernoulli", n.trees = 2000, 
                         interaction.depth = depths[i], 
                         cv.folds = 10)
   print(i)
 }
+
 save(bt.models, file = "bt_cv_models.Rdata")
 
 
@@ -82,8 +83,12 @@ final.depth
 
 test.dat.preds <- predict(bt.models[[m]], newdata = test.dat, 
                           n.trees = final.ntrees)
+test.dat.preds.class <- test.dat.preds
+test.dat.preds.class[test.dat.preds.class >= 0.5] <- 1
+test.dat.preds.class[test.dat.preds.class < 0.5] <- 1
 
 #Test set MSE:
-mean((test.dat.preds - test.dat$recidivate)^2)
+mean((test.dat.preds.class - test.dat$recidivate)^2)
+
 
 # 0.2041584
