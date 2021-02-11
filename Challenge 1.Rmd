@@ -451,6 +451,7 @@ pseudo_dat$sex <- as.factor(pseudo_dat$sex)
 pseudo_dat$charge_name <- as.factor(pseudo_dat$charge_name)
 
 pseudo_dat <-  model.matrix(~.-1, pseudo_dat[,])  # Convert all categorical variable to dummies.
-pyhat <- predict(final_model, newx = pseudo_dat, type = "response")[,1]
+final_predprob <- predict(final_model, newx = pseudo_dat, type = "response")[,1]
+final_class <- final_predprob > 0.5
 
 ```
