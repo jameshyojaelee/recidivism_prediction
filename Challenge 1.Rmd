@@ -1,7 +1,7 @@
 ---
 title: "Challenge 1 - Poli 175"
-author: "Emanuela Beale"
-date: "2/8/2021"
+author: "Emanuela Beale & Maya Lu & James Lee"
+date: "2/11/2021"
 output: html_document
 ---
 
@@ -238,7 +238,7 @@ n.vars[best.mod]
 **Step 3: ** Predict onto test data:
 ```{r}
 predprob <- predict(rf.models[[best.mod]], newdata = test.dat.class, type = "prob")
-test.dat.rfpreds <- data.frame(predprob[,2])
+predprob <- predprob[,2]
 ```
 
 ## Evaluating Error Metrics
@@ -283,7 +283,10 @@ calib_plot <- function(y, yhat, title) {
   ggplot(df, aes(x = decile_bins, y = probability, color = key)) + 
     geom_line() +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
-    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    theme_bw() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    theme(legend.background = element_rect(fill="lightblue",
+                                  size=0.4, linetype="solid", 
+                                  colour ="darkblue")) +
     ggtitle(title) + 
     xlab("Predicted Probability Decile Bin") + ylab("Probability")
 }
@@ -307,10 +310,12 @@ calib_plot_race <- function(y, yhat, race, title) {
   ggplot(df, aes(x = decile_bins, y = actual_recidivism, color = race)) + 
     geom_line() +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
-    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    theme_bw() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) + 
+    theme(legend.background = element_rect(fill="lightblue",
+                                  size=0.4, linetype="solid", 
+                                  colour ="darkblue")) +
     ggtitle(title) + 
     xlab("Pred Probability Decile Bin") + ylab("Average Recidivism Rate")
-  
 }
 ```
 
@@ -346,7 +351,7 @@ Calculating recall for the different models:
 recall_log <- calc_recall(dat$recidivate,CV.dat$yhat)
 recall_lasso <- calc_recall(y.test,test.predprob)
 recall_ridge <- calc_recall(y.test,test.predprob.rr)
-recall_bt <- calc_recall(dat$recidivate,test.dat.preds)
+recall_bt <- calc_recall(test.dat$recidivate,test.dat.preds)
 recall_rf <- calc_recall(test.dat$recidivate,predprob)
 ```
 
@@ -367,12 +372,12 @@ Next, each model's calibration plot will better illustrate its predictive abilit
 **Logistic Regression** 
 General Calibration Plot:
 ```{r}
-calib_plot(dat$recidivate,CV.dat$yhat,"Logistic Regression Calibration Plot")
+calib_plot(y, CV.dat$yhat,"Logistic Regression Calibration Plot")
 ```
 
 Calibration plot by race:
 ```{r}
-calib_plot_race(dat$recidivate,CV.dat$yhat,c(1:6),"Logistic Regression Calibration Plot by Race")
+calib_plot_race(y,CV.dat$yhat,dat$race,"Logistic Regression Calibration Plot by Race")
 ```
 
 **Lasso Regression** 
@@ -383,7 +388,7 @@ calib_plot(y.test,test.predprob,"Lasso Regression Calibration Plot")
 
 Calibration plot by race:
 ```{r}
-calib_plot_race(y.test,test.predprob,c(1:6),"Lasso Regression Calibration Plot by Race")
+calib_plot_race(y.test,test.predprob,dat$race[-r],"Lasso Regression Calibration Plot by Race")
 ```
 
 **Ridge Regression** 
@@ -394,18 +399,18 @@ calib_plot(y.test,test.predprob.rr,"Ridge Regression Calibration Plot")
 
 Calibration plot by race:
 ```{r}
-calib_plot_race(y.test,test.predprob.rr,c(1:6),"Ridge Regression Calibration Plot by Race")
+calib_plot_race(y.test,test.predprob.rr,dat$race[-r],"Ridge Regression Calibration Plot by Race")
 ```
 
 **Boosted Trees Model** 
 General Calibration Plot:
 ```{r}
-calib_plot(dat$recidivate,test.dat.preds,"Boosted Trees Calibration Plot")
+calib_plot(test.dat$recidivate,test.dat.preds,"Boosted Trees Calibration Plot")
 ```
 
 Calibration plot by race:
 ```{r}
-calib_plot_race(dat$recidivate,test.dat.preds,c(1:6),"Boosted Trees Calibration Plot by Race")
+calib_plot_race(test.dat$recidivate,test.dat.preds,test.dat$race,"Boosted Trees Calibration Plot by Race")
 ```
 
 **Random Forest Model** 
@@ -416,6 +421,5 @@ calib_plot(test.dat$recidivate,predprob,"Random Forest Calibration Plot")
 
 Calibration plot by race:
 ```{r}
-
-calib_plot_race(test.dat$recidivate,predprob,c(1:6),"Random Forest Calibration Plot by Race")
+calib_plot_race(test.dat$recidivate,predprob,test.dat$race,"Random Forest Calibration Plot by Race")
 ```
