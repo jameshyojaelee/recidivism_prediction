@@ -443,4 +443,15 @@ Furthermore, when looking at the calibration plot, it provides the most consiste
 
 ``` {r}
 final_model <- opt.model.rr
+pseudo_dat <- read.csv("recidivism_data_pseudo_new.csv")
+pseudo_dat$race <- as.factor(pseudo_dat$race)
+pseudo_dat$sex <- as.factor(pseudo_dat$sex)
+pseudo_dat$charge_name <- as.factor(pseudo_dat$charge_name)
+
+
+pdat <- model.matrix(~ ., data=pseudo_dat) # Convert all categorical variable to dummies.
+
+
+pyhat <- predict(final_model, newx = pdat, type = "response")[,1]
+
 ```
