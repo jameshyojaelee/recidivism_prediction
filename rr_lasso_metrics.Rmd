@@ -1,0 +1,160 @@
+---
+title: "Metrics (RR and LASSO)"
+author: "Maya Lu"
+date: "2/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(ggplot2)
+library(glmnet)
+library(dplyr)
+library(tidyr)
+load("opt_model_lasso.Rdata")
+load("opt_model_rr.Rdata")
+```
+
+Separate y and X into Training and Test sets.
+```{r}
+dat <- read.csv("recidivism_data_sample.csv")
+
+#convert categorical variables to factors
+dat$race <- as.factor(dat$race)
+dat$sex <- as.factor(dat$sex)
+
+# set y
+y <- dat$recidivate
+
+# create the X matrix
+x <- subset(dat, select = -c(recidivate))
+x <- model.matrix(~.-1, x[,]) # Convert all categorical variable to dummies.
+
+# Determine number of in training and test set. Split accordingly.
+n.total <- length(y)
+prop.train <- 0.67 
+set.seed(123)
+r <- sample(1:n.total, round(prop.train*n.total), replace = FALSE) 
+
+x.train <- x[r,]
+x.test <- x[-r,]
+y.train <- y[r]
+y.test <- y[-r]
+```
+
+Get ridge regression and LASSO predictions.
+```{r} 
+lasso.yhat <- predict(opt.model.lasso, newx = x.test, type = "response")[,1]
+rr.yhat <- predict(opt.model.rr, newx = x.test, type = "response")[,1]
+```
+
+
+Define error metric functions
+```{r}
+# yhat is the vector of predicted probabilities
+calc_acc <- function(y, yhat){
+  yhat.class <- yhat > 0.5
+  return(mean(y == yhat.class))
+}
+
+calc_prec <- function(y, yhat) {
+  yhat.class <- yhat > 0.5
+  return(mean(y[yhat.class == 1] == 1))
+}
+
+calc_recall <- function(y, yhat) {
+  yhat.class <- yhat > 0.5
+  return(mean(yhat.class[y == 1] == 1))
+}
+
+calc_mse <- function(y, yhat) {
+  return(mean((yhat - y)^2))
+}
+
+calib_plot <- function(y, yhat, title) {
+  # split into deciles
+  prob_deciles <- seq(from = 0, to = 1, by = 0.1)
+ 
+  # summary stats
+  prob_decile_bins <- as.numeric(
+  cut(yhat, breaks = prob_deciles, include.lowest = TRUE))
+  
+  prob_decile_bins <- prob_decile_bins/10
+  
+  # plot calibration
+  df <- data.frame(y = y, yhat = yhat, decile_bins = prob_decile_bins)
+  df <- as.data.frame(df %>%
+                        group_by(decile_bins) %>%
+                        summarise(actual_recidivism = mean(y),
+                                  pred_prob = mean(yhat))) %>%
+  gather(key = "key", value = "probability", -decile_bins)
+  
+  # plot
+  ggplot(df, aes(x = decile_bins, y = probability, color = key)) + 
+    geom_line() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    ggtitle(title) + 
+    xlab("Predicted Probability Decile Bin") + ylab("Probability")
+}
+
+calib_plot_race <- function(y, yhat, race_vector, title) {
+  # split into deciles
+  prob_deciles <- seq(from = 0, to = 1, by = 0.1)
+ 
+  # summary stats
+  prob_decile_bins <- as.numeric(
+  cut(yhat, breaks = prob_deciles, include.lowest = TRUE))
+  
+  prob_decile_bins <- prob_decile_bins/10
+  
+  # create df
+  df <- data.frame(y = y, yhat = yhat, race = race, decile_bins = prob_decile_bins)
+  df <- as.data.frame(df %>%
+                        group_by(race, decile_bins) %>%
+                        summarise(actual_recidivism = mean(y),
+                                  pred_prob = mean(yhat)))
+  # plot
+  ggplot(df, aes(x = decile_bins, y = actual_recidivism, color = race)) + 
+    geom_line() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    ggtitle(title) + 
+    xlab("Pred Probability Decile Bin") + ylab("Average Recidivism Rate")
+  
+}
+```
+
+
+Get ridge regression and LASSO metrics
+```{r}
+yhats <- list()
+yhats[[1]] <- lasso.yhat
+yhats[[2]] <- rr.yhat
+
+metrics <- as.data.frame(matrix(data = NA, nrow = 4, ncol = 2), row.names =  c("accuracy", "precision", "recall", "brier"))
+colnames(metrics) <-  c("lasso", "rr")
+
+# create table of metrics
+for (i in 1:length(yhats)) {
+  metrics[1, i] <- calc_acc(y = y.test, yhat = yhats[[i]])
+  metrics[2, i] <- calc_prec(y = y.test, yhat = yhats[[i]])
+  metrics[3, i] <- calc_recall(y = y.test, yhat = yhats[[i]])
+  metrics[4, i] <- calc_mse(y = y.test, yhat = yhats[[i]])
+}
+
+metrics
+```
+
+
+Get ridge regression and LASSO calibration plots
+```{r}
+calib_plot(y = y.test, yhat = lasso.yhat, title = "Lasso Calibration")
+calib_plot(y = y.test, yhat = rr.yhat, "Ridge Regression Calibration")
+
+race <- dat$race[-r]
+calib_plot_race(y = y.test, yhat = lasso.yhat, race,"Lasso Calibration")
+calib_plot_race(y = y.test, yhat = rr.yhat, race,"Ridge Regression Calibration")
+
+```
+

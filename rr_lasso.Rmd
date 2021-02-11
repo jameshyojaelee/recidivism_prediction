@@ -10,6 +10,8 @@ rm(list = ls())
 library(tidyr)
 library(glmnet)
 dat <- read.csv("recidivism_data_sample.csv")
+dat$race <- as.factor(dat$race)
+dat$sex <- as.factor(dat$sex)
 ```
 
 ## Setup   
@@ -76,6 +78,8 @@ recallLASSO.test <- mean(yhat.test[y.test == 1] == 1)
 
 #mse
 mseLASSO.test <- mean((yhat.test - y.test)^2)
+mseLASSO.test.prob <- mean((test.predprob - y.test)^2)
+
 ```
 
 ## RIDGE REGRESSION
@@ -108,6 +112,7 @@ recallRR.test <- mean(yhat.test.rr[y.test == 1] == 1)
 
 #mse
 mseRR.test <- mean((yhat.test.rr-y.test)^2)
+mseRR.test.prob <- mean((test.predprob.rr - y.test)^2)
 ```
 
 ## Results
