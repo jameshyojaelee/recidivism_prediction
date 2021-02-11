@@ -6,45 +6,45 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(glmnet)
 library(ISLR)
+library(randomForest)
+library(gbm)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
 ```
 
 ```{r}
-rec <- read.csv("/Users/emanuelabeale/Downloads/recidivism_data_sample.csv")
+dat <- read.csv("recidivism_data_sample.csv")
 ```
 
 Because the dataset contains catagorical variables in the form of numbers, we should clarify that they should be treated as factors:
 ```{r}
-rec$race <- as.factor(rec$race)
+dat$race <- as.factor(dat$race)
 ```
 
-## MODEL 1: Omitting Sensitive Attributes
-First we can choose the number of folds:
+## MODEL 1: Logistic Regression
+**Step 1: ** Choose number of folds and create partitions:
 ```{r}
 k <- 10
-```
-
-We can then create partitions:
-```{r}
-n <- nrow(rec)
+n <- nrow(dat)
 folds <- c(rep(1:k,600))
 set.seed(131)
 folds <- sample(folds,length(folds))
 table(folds)
 ```
 
-Next we can implement the partitions:
+**Step 2: ** Implement partitions:
 ```{r}
-rec$yhat <- NA
+dat$yhat <- NA
 data.folds <- list()
 for (i in 1:k){
-  data.folds[[i]] <- rec[folds == i,]
+  data.folds[[i]] <- dat[folds == i,]
 }
 ```
 
-We can then implement CV:
+**Step 3: ** Apply cross validation on logistic regression:
 ```{r}
 for (i in 1:k){
   train.dat <- do.call("rbind",data.folds[-i])
@@ -74,25 +74,348 @@ CV.dat$yhat2 <- rep(NA,length(CV.dat$yhat))
 class_err <- mean(as.numeric((CV.dat$recidivate - CV.dat$yhat2)^2),na.rm=TRUE)
 ```
 
-Precision, Accuracy, Recall:
+
+## MODEL 2: Lasso Regression
+# Setup   
+Separate data into training and test set:
 ```{r}
-rec$yhat <- as.numeric(CV.dat$yhat > 0.5)
-log_accuracy <- mean(rec$recidivate == rec$yhat)
-log_precision <- mean(rec$recidivate[rec$yhat == 1] == 1)
-log_recall <- mean(rec$yhat[rec$recidivate == 1] == 1)
+# Split into predictor vector (y) and feature matrix (x)
+y <- dat$recidivate
+# =====================
+# CREATING THE X MATRIX
+# =====================
+x <- subset(dat, select = -c(recidivate, yhat))
+x <- model.matrix(~.-1, x[,]) # Convert all categorical variable to dummies.
+n.total <- length(y)
+prop.train <- 0.67 
+set.seed(123)
+r <- sample(1:n.total, round(prop.train*n.total), replace = FALSE) 
+x.train <- x[r,]
+x.test <- x[-r,]
+y.train <- y[r]
+y.test <- y[-r]
 ```
 
-We can collect all these error metrics in the following table:
+**Step 1: ** Find optimal lambda value using cross validation:
 ```{r}
-labcol <- c("Class. Error","MSE","Accuracy","Precision","Recall")
-labrow <- c("Values")
-vals <- c(class_err,log_mse,log_accuracy,log_precision,log_recall)
-error_metrics <- matrix(vals,nrow = 1, byrow = TRUE, dimnames = list(labrow,labcol))
-error_metrics
+lasso.cv <- cv.glmnet(x = x.train, y = y.train,
+                             family = "binomial", nfolds = 10, alpha = 1)
+plot(lasso.cv)
 ```
 
-We can also create a calibration plot to visualize the predictive abilities of the logistic regression:
+**Step 2: ** Fit model with optimal lambda:
 ```{r}
-
+opt.lambda.lasso <- lasso.cv$lambda.1se
+opt.model.lasso <-  glmnet(x = x.train, y = y.train, alpha = 1, lambda = opt.lambda.lasso, family = "binomial") 
 ```
 
+**Step 3: ** Predict onto test data:
+```{r}
+test.predprob <- predict(opt.model.lasso, newx = x.test, type = "response")
+yhat.test <- as.numeric(test.predprob > 0.5)
+```
+
+
+## MODEL 3: Ridge Regression
+**Step 1: ** Find optimal lambda value using cross validation: 
+```{r}
+rr.cv <- cv.glmnet(x = x.train, y = y.train,
+                             family = "binomial", nfolds = 10, alpha = 0)
+plot(rr.cv)
+```
+
+**Step 2: ** Fit model with optimal lambda:
+```{r}
+opt.lambda.rr <- rr.cv$lambda.1se
+opt.model.rr <-  glmnet(x = x.train, y = y.train, alpha = 0, lambda = opt.lambda.rr, family = "binomial") 
+```
+
+**Step 3: ** Predict onto test data:
+```{r}
+test.predprob.rr <- predict(opt.model.rr, newx = x.test, type = "response")
+yhat.test.rr <- as.numeric(test.predprob.rr > 0.5)
+```
+
+
+## MODEL 4: Boosted Tree
+# Setup:
+ID variable dropped as it will not affect the model:
+```{r}
+tdat <- read.csv("recidivism_data_sample.csv")
+tdat <- tdat[,-1]
+tdat$race <- as.factor(tdat$race)
+tdat$sex <- as.factor(tdat$race)
+tdat$charge_name <- as.factor(tdat$charge_name)
+```
+
+**Step 1: ** Data split:
+```{r}
+set.seed(1234)
+n <- nrow(tdat)
+v <- sample(n,4000,replace = FALSE)
+train.dat <- tdat[v,]
+test.dat <- tdat[-v,]
+```
+
+**Step 2: ** Apply cross validation on boosted trees:
+```{r include=FALSE}
+depths <- c(1,2,3,4,5,6,7,8)
+bt.models <- list()
+set.seed(1234)
+
+for (i in 1:length(depths)){
+  bt.models[[i]] <- gbm(recidivate ~  ., 
+                        data = train.dat, shrinkage = 0.01,
+                        distribution="bernoulli", n.trees = 2000, 
+                        interaction.depth = depths[i], 
+                        cv.folds = 10)
+  print(i)
+}
+save(bt.models, file = "bt_cv_models.Rdata")
+load("bt_cv_models.Rdata")
+
+n.depths <- length(bt.models)
+depths <- rep(NA, n.depths)
+min.cv.error <- rep(NA, n.depths)
+best.n.trees <- rep(NA, n.depths)
+
+for (i in 1:n.depths){
+  bt.curr <- bt.models[[i]]
+  depths[i] <- bt.curr$interaction.depth
+  min.cv.error[i] <- min(bt.curr$cv.error)
+  best.n.trees[i] <- which.min(bt.curr$cv.error)
+  rm(bt.curr)
+}
+
+m <- which.min(min.cv.error)
+final.ntrees <- best.n.trees[m]
+final.depth <- depths[m]
+```
+
+**Step 3: ** Predict onto test data:
+```{r}
+test.dat.preds <- predict(bt.models[[m]], newdata = test.dat, 
+                          n.trees = final.ntrees, type="response")
+```
+
+
+## Model 5: Random Forest
+**Step 1: ** Convert recidivate variable into factor:
+```{r}
+train.dat.class <- train.dat
+train.dat.class$recidivate <- as.factor(train.dat.class$recidivate)
+test.dat.class <- test.dat
+test.dat.class$recidivate <- as.factor(test.dat.class$recidivate)
+```
+
+**Step 2: ** Apply cross validation to random forest:
+```{r include=FALSE}
+n.vars <- c(1,2,3,4,5,6,7,8)
+rf.models <- list()
+# use CV to choose m (number of variables to consider at each split)
+set.seed(3956)
+for (i in 1:length(n.vars)){
+  
+  rf.models[[i]] <- randomForest(recidivate ~ .,
+                                 train.dat.class, ntree = 1000,
+                                 mtry = n.vars[i])
+  print(i)
+}
+save(rf.models, file = "rf_cv_models.Rdata")
+load("rf_cv_models.Rdata")
+n.mods <- length(rf.models)
+oob.err <- rep(NA,n.mods)
+n.vars <- rep(NA,n.mods)
+# must use err.rate instead of mse since classification variables are factors
+for (i in 1:n.mods){
+  oob.err[i] <- min(rf.models[[i]]$err.rate)
+  n.vars[i] <- rf.models[[i]]$mtry
+}
+best.mod <- which.min(oob.err)
+n.vars[best.mod]
+```
+
+**Step 3: ** Predict onto test data:
+```{r}
+predprob <- predict(rf.models[[best.mod]], newdata = test.dat.class, type = "prob")
+test.dat.rfpreds <- data.frame(predprob[,2])
+```
+
+## Evaluating Error Metrics
+# Setup
+The following functions can be used to simplify the calculation of error metrics:
+```{r}
+# yhat is the vector of predicted probabilities
+calc_acc <- function(y, yhat){
+  yhat.class <- yhat > 0.5
+  return(mean(y == yhat.class))
+}
+calc_prec <- function(y, yhat) {
+  yhat.class <- yhat > 0.5
+  return(mean(y[yhat.class == 1] == 1))
+}
+calc_recall <- function(y, yhat) {
+  yhat.class <- yhat > 0.5
+  return(mean(yhat.class[y == 1] == 1))
+}
+calc_mse <- function(y, yhat) {
+  return(mean((yhat - y)^2))
+}
+calib_plot <- function(y, yhat, title) {
+  # split into deciles
+  prob_deciles <- seq(from = 0, to = 1, by = 0.1)
+ 
+  # summary stats
+  prob_decile_bins <- as.numeric(
+  cut(yhat, breaks = prob_deciles, include.lowest = TRUE))
+  
+  prob_decile_bins <- prob_decile_bins/10
+  
+  # plot calibration
+  df <- data.frame(y = y, yhat = yhat, decile_bins = prob_decile_bins)
+  df <- as.data.frame(df %>%
+                        group_by(decile_bins) %>%
+                        summarise(actual_recidivism = mean(y),
+                                  pred_prob = mean(yhat))) %>%
+  gather(key = "key", value = "probability", -decile_bins)
+  
+  # plot
+  ggplot(df, aes(x = decile_bins, y = probability, color = key)) + 
+    geom_line() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    ggtitle(title) + 
+    xlab("Predicted Probability Decile Bin") + ylab("Probability")
+}
+calib_plot_race <- function(y, yhat, race, title) {
+  # split into deciles
+  prob_deciles <- seq(from = 0, to = 1, by = 0.1)
+ 
+  # summary stats
+  prob_decile_bins <- as.numeric(
+  cut(yhat, breaks = prob_deciles, include.lowest = TRUE))
+  
+  prob_decile_bins <- prob_decile_bins/10
+  
+  # create df
+  df <- data.frame(y = y, yhat = yhat, race = race, decile_bins = prob_decile_bins)
+  df <- as.data.frame(df %>%
+                        group_by(race, decile_bins) %>%
+                        summarise(actual_recidivism = mean(y),
+                                  pred_prob = mean(yhat)))
+  # plot
+  ggplot(df, aes(x = decile_bins, y = actual_recidivism, color = race)) + 
+    geom_line() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    theme_gray() + theme(plot.margin = margin(1.5,0,1.5,0, "cm")) +
+    ggtitle(title) + 
+    xlab("Pred Probability Decile Bin") + ylab("Average Recidivism Rate")
+  
+}
+```
+
+Calculating MSE for the different models:
+```{r}
+mse_log <- calc_mse(dat$recidivate,CV.dat$yhat)
+mse_lasso <- calc_mse(y.test,test.predprob)
+mse_ridge <- calc_mse(y.test,test.predprob.rr)
+mse_bt <- calc_mse(dat$recidivate,test.dat.preds)
+mse_rf <- calc_mse(test.dat$recidivate,predprob)
+```
+
+Calculating accuracy for the different models:
+```{r}
+acc_log <- calc_acc(dat$recidivate,CV.dat$yhat)
+acc_lasso <- calc_acc(y.test,test.predprob)
+acc_ridge <- calc_acc(y.test,test.predprob.rr)
+acc_bt <- calc_acc(dat$recidivate,test.dat.preds)
+acc_rf <- calc_acc(test.dat$recidivate,predprob)
+```
+
+Calculating precision for the different models:
+```{r}
+prec_log <- calc_prec(dat$recidivate,CV.dat$yhat)
+prec_lasso <- calc_prec(y.test,test.predprob)
+prec_ridge <- calc_prec(y.test,test.predprob.rr)
+prec_bt <- calc_prec(dat$recidivate,test.dat.preds)
+prec_rf <- calc_prec(test.dat$recidivate,predprob)
+```
+
+Calculating recall for the different models:
+```{r}
+recall_log <- calc_recall(dat$recidivate,CV.dat$yhat)
+recall_lasso <- calc_recall(y.test,test.predprob)
+recall_ridge <- calc_recall(y.test,test.predprob.rr)
+recall_bt <- calc_recall(dat$recidivate,test.dat.preds)
+recall_rf <- calc_recall(test.dat$recidivate,predprob)
+```
+
+Placing values in table:
+```{r}
+labcol <- c("MSE","Accuracy","Precision","Recall")
+labrow <- c("Log Reg","Lasso","Ridge","Boosted Trees","Random Forest")
+log_val <- c(mse_log,acc_log,prec_log,recall_log)
+lasso_val <- c(mse_lasso,acc_lasso,prec_lasso,recall_lasso)
+ridge_val <- c(mse_ridge,acc_ridge,prec_ridge,recall_ridge)
+bt_val <- c(mse_bt,acc_bt,prec_bt,recall_bt)
+rf_val <- c(mse_rf,acc_rf,prec_rf,recall_rf)
+table <- matrix(c(log_val,lasso_val,ridge_val,bt_val,rf_val),nrow=5, byrow = TRUE, dimnames = list(labrow,labcol))
+table
+```
+
+Next, each model's calibration plot will better illustrate its predictive abilities:
+**Logistic Regression** 
+General Calibration Plot:
+```{r}
+calib_plot(dat$recidivate,CV.dat$yhat,"Logistic Regression Calibration Plot")
+```
+
+Calibration plot by race:
+```{r}
+calib_plot_race(dat$recidivate,CV.dat$yhat,c(1:6),"Logistic Regression Calibration Plot by Race")
+```
+
+**Lasso Regression** 
+General Calibration Plot:
+```{r}
+calib_plot(y.test,test.predprob,"Lasso Regression Calibration Plot")
+```
+
+Calibration plot by race:
+```{r}
+calib_plot_race(y.test,test.predprob,c(1:6),"Lasso Regression Calibration Plot by Race")
+```
+
+**Ridge Regression** 
+General Calibration Plot:
+```{r}
+calib_plot(y.test,test.predprob.rr,"Ridge Regression Calibration Plot")
+```
+
+Calibration plot by race:
+```{r}
+calib_plot_race(y.test,test.predprob.rr,c(1:6),"Ridge Regression Calibration Plot by Race")
+```
+
+**Boosted Trees Model** 
+General Calibration Plot:
+```{r}
+calib_plot(dat$recidivate,test.dat.preds,"Boosted Trees Calibration Plot")
+```
+
+Calibration plot by race:
+```{r}
+calib_plot_race(dat$recidivate,test.dat.preds,c(1:6),"Boosted Trees Calibration Plot by Race")
+```
+
+**Random Forest Model** 
+General Calibration Plot:
+```{r}
+calib_plot(test.dat$recidivate,predprob,"Random Forest Calibration Plot")
+```
+
+Calibration plot by race:
+```{r}
+
+calib_plot_race(test.dat$recidivate,predprob,c(1:6),"Random Forest Calibration Plot by Race")
+```
