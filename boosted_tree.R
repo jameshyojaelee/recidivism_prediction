@@ -57,10 +57,11 @@ final.depth
 
 # final model
 test.dat.preds <- predict(bt.models[[m]], newdata = test.dat, 
-                          n.trees = final.ntrees)
+                          n.trees = final.ntrees, type="response")
 
 #Test set MSE:
 mean((test.dat.preds - test.dat$recidivate)^2)
+#  0.2043173
 
 
-# 0.2041584
+
