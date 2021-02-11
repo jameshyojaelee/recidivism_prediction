@@ -14,14 +14,16 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 ```
-## Load data
+### Load data
 ```{r}
 dat <- read.csv("recidivism_data_sample.csv")
+dat = dat[, -1]
 ```
 
 Because the dataset contains catagorical variables in the form of numbers, we should clarify that they should be treated as factors:
 ```{r}
 dat$race <- as.factor(dat$race)
+dat$sex <- as.factor(dat$sex)
 ```
 
 ## MODEL 1: Logistic Regression
@@ -78,7 +80,7 @@ log.yhat <- CV.dat$yhat
 
 
 ## MODEL 2: Lasso Regression
-# Setup   
+### Setup   
 Separate data into training and test set:
 ```{r}
 # Split into predictor vector (y) and feature matrix (x)
@@ -138,7 +140,7 @@ rr.yhat <- predict(opt.model.rr, newx = x.test, type = "response")[,1]
 
 
 ## MODEL 4: Boosted Tree
-# Setup:
+### Setup:
 ID variable dropped as it will not affect the model:
 ```{r}
 tdat <- read.csv("recidivism_data_sample.csv")
@@ -242,7 +244,7 @@ rf.yhat <- rf.yhat[,2]
 ```
 
 ## Evaluating Error Metrics
-# Setup
+### Setup
 The following helper functions can be used to simplify the calculation of error metrics:
 ```{r}
 # yhat is the vector of predicted probabilities
@@ -448,10 +450,7 @@ pseudo_dat$race <- as.factor(pseudo_dat$race)
 pseudo_dat$sex <- as.factor(pseudo_dat$sex)
 pseudo_dat$charge_name <- as.factor(pseudo_dat$charge_name)
 
-
-pdat <- model.matrix(~ ., data=pseudo_dat) # Convert all categorical variable to dummies.
-
-
-pyhat <- predict(final_model, newx = pdat, type = "response")[,1]
+pseudo_dat <-  model.matrix(~.-1, pseudo_dat[,])  # Convert all categorical variable to dummies.
+pyhat <- predict(final_model, newx = pseudo_dat, type = "response")[,1]
 
 ```
