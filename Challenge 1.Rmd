@@ -1,0 +1,98 @@
+---
+title: "Challenge 1 - Poli 175"
+author: "Emanuela Beale"
+date: "2/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(ISLR)
+```
+
+```{r}
+rec <- read.csv("/Users/emanuelabeale/Downloads/recidivism_data_sample.csv")
+```
+
+Because the dataset contains catagorical variables in the form of numbers, we should clarify that they should be treated as factors:
+```{r}
+rec$race <- as.factor(rec$race)
+```
+
+## MODEL 1: Omitting Sensitive Attributes
+First we can choose the number of folds:
+```{r}
+k <- 10
+```
+
+We can then create partitions:
+```{r}
+n <- nrow(rec)
+folds <- c(rep(1:k,600))
+set.seed(131)
+folds <- sample(folds,length(folds))
+table(folds)
+```
+
+Next we can implement the partitions:
+```{r}
+rec$yhat <- NA
+data.folds <- list()
+for (i in 1:k){
+  data.folds[[i]] <- rec[folds == i,]
+}
+```
+
+We can then implement CV:
+```{r}
+for (i in 1:k){
+  train.dat <- do.call("rbind",data.folds[-i])
+  cv.mod <- glm(recidivate ~ as.factor(race) + sex + age + juv_fel_count + juv_misd_count + priors_count + charge_degree + charge_name, family = binomial(link="logit"), data = train.dat)
+  data.folds[[i]]$yhat <- predict(cv.mod, newdata = data.folds[[i]], type = "response")
+  rm(train.dat,cv.mod)
+}
+CV.dat <- do.call("rbind",data.folds)
+```
+
+We can calculate the MSE based on predicted probabilities:
+```{r}
+log_mse <- mean(as.numeric((CV.dat$recidivate - CV.dat$yhat)^2), na.rm = TRUE)
+```
+
+Alternatively, we can calculate MSE based on the classification error:
+```{r}
+CV.dat$yhat2 <- rep(NA,length(CV.dat$yhat))
+  for(i in 1:length(CV.dat$yhat)){
+    if (CV.dat$yhat[i] >= 0.5){
+      CV.dat$yhat2[i] = 1
+    }
+    if (CV.dat$yhat[i] < 0.5){
+      CV.dat$yhat2[i] = 0
+    }
+  }
+class_err <- mean(as.numeric((CV.dat$recidivate - CV.dat$yhat2)^2),na.rm=TRUE)
+```
+
+Precision, Accuracy, Recall:
+```{r}
+rec$yhat <- as.numeric(CV.dat$yhat > 0.5)
+log_accuracy <- mean(rec$recidivate == rec$yhat)
+log_precision <- mean(rec$recidivate[rec$yhat == 1] == 1)
+log_recall <- mean(rec$yhat[rec$recidivate == 1] == 1)
+```
+
+We can collect all these error metrics in the following table:
+```{r}
+labcol <- c("Class. Error","MSE","Accuracy","Precision","Recall")
+labrow <- c("Values")
+vals <- c(class_err,log_mse,log_accuracy,log_precision,log_recall)
+error_metrics <- matrix(vals,nrow = 1, byrow = TRUE, dimnames = list(labrow,labcol))
+error_metrics
+```
+
+We can also create a calibration plot to visualize the predictive abilities of the logistic regression:
+```{r}
+
+```
+
